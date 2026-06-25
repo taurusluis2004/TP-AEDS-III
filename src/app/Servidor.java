@@ -1,8 +1,12 @@
 package app;
 
+import app.busca.BuscaService;
+import app.busca.ItemEncontrado;
+import app.busca.ResultadoBusca;
 import app.compression.Backup;
 import app.compression.CompressaoService;
 import app.compression.ResultadoCompressao;
+import app.seguranca.CriptografiaXOR;
 import app.controller.AlimentoController;
 import app.controller.ConsumoController;
 import app.controller.FavoritoController;
@@ -22,6 +26,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.*;
 import java.net.InetSocketAddress;
+import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -86,6 +91,8 @@ public class Servidor {
         server.createContext("/api/consumo",  Servidor::handleConsumo);
         server.createContext("/api/favorito", Servidor::handleFavorito);
         server.createContext("/api/backup", Servidor::handleBackup);
+        server.createContext("/api/busca", Servidor::handleBusca);
+        server.createContext("/api/seguranca", Servidor::handleSeguranca);
         server.createContext("/", Servidor::handleStatic);
 
         server.setExecutor(null);
@@ -106,6 +113,8 @@ public class Servidor {
         System.out.println("[Servidor] Índice B+ (alimento por nome): " + alimentoDAO.descricaoIndiceNome());
         System.out.println("[Servidor] Índices N:N favoritos: " + favoritoDAO.descricaoIndices());
         System.out.println("[Servidor] Backup/Compressão (Fase IV): Huffman e LZW em /api/backup");
+        System.out.println("[Servidor] Casamento de padrões (Fase V): KMP e Boyer-Moore em /api/busca");
+        System.out.println("[Servidor] Criptografia (Fase V): XOR no campo Usuario.email em /api/seguranca");
         System.out.println("[Servidor] Ctrl+C para encerrar.");
     }
 
@@ -462,6 +471,131 @@ public class Servidor {
                 + ",\"integridadeOk\":" + r.integridadeOk
                 + ",\"milissegundos\":" + r.milissegundos
                 + "}";
+    }
+
+    // ====================================================================
+    //   CASAMENTO DE PADRÕES (FASE V — KMP e Boyer-Moore)
+    // ====================================================================
+
+    /**
+     * {@code GET /api/busca?padrao=<texto>&algoritmo=<kmp|bm>}
+     * Aplica KMP ou Boyer-Moore sobre o campo {@code Alimento.nome} e devolve os
+     * registros encontrados + métricas (comparações, tempo).
+     */
+    private static void handleBusca(HttpExchange ex) throws IOException {
+        try {
+            if (!ex.getRequestMethod().equals("GET")) { sendError(ex, 405, "Método não permitido"); return; }
+            Map<String, String> q = queryParams(ex);
+            String padrao = q.get("padrao");
+            String algoritmo = q.getOrDefault("algoritmo", "kmp");
+
+            BuscaService.Algoritmo algo = BuscaService.Algoritmo.de(algoritmo);
+            ResultadoBusca r = BuscaService.buscarAlimentosPorNome(alimentoDAO, padrao, algo);
+            sendJson(ex, 200, resultadoBuscaToJson(r));
+        } catch (IllegalArgumentException iae) {
+            sendError(ex, 400, iae.getMessage());
+        } catch (Exception e) {
+            sendError(ex, 500, e.getMessage());
+        }
+    }
+
+    private static String resultadoBuscaToJson(ResultadoBusca r) {
+        StringBuilder enc = new StringBuilder("[");
+        for (int i = 0; i < r.encontrados.size(); i++) {
+            ItemEncontrado it = r.encontrados.get(i);
+            if (i > 0) enc.append(',');
+            enc.append("{\"id\":").append(it.id)
+               .append(",\"valor\":").append(jstr(it.valorCampo))
+               .append(",\"posicoes\":").append(intArr(it.posicoes))
+               .append(",\"ocorrencias\":").append(it.ocorrencias)
+               .append('}');
+        }
+        enc.append(']');
+        return "{\"algoritmo\":" + jstr(r.algoritmo)
+                + ",\"padrao\":" + jstr(r.padrao)
+                + ",\"campo\":" + jstr(r.campo)
+                + ",\"totalRegistros\":" + r.totalRegistros
+                + ",\"quantidadeEncontrada\":" + r.quantidadeEncontrada()
+                + ",\"comparacoes\":" + r.comparacoes
+                + ",\"milissegundos\":" + String.format(java.util.Locale.US, "%.3f", r.milissegundos)
+                + ",\"encontrados\":" + enc
+                + "}";
+    }
+
+    private static String intArr(List<Integer> xs) {
+        if (xs == null || xs.isEmpty()) return "[]";
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < xs.size(); i++) {
+            if (i > 0) sb.append(',');
+            sb.append(xs.get(i));
+        }
+        return sb.append(']').toString();
+    }
+
+    // ====================================================================
+    //   CRIPTOGRAFIA (FASE V — XOR no campo sensível Usuario.email)
+    // ====================================================================
+
+    /**
+     * {@code GET /api/seguranca/demo?texto=<texto>} — cifra/decifra de demonstração.
+     * {@code GET /api/seguranca/usuario/{id}}       — e-mail claro x cifrado (como em disco).
+     */
+    private static void handleSeguranca(HttpExchange ex) throws IOException {
+        try {
+            if (!ex.getRequestMethod().equals("GET")) { sendError(ex, 405, "Método não permitido"); return; }
+            String[] partes = pathSegments(ex, "/api/seguranca");
+
+            if (partes.length == 1 && partes[0].equals("demo")) {
+                String texto = queryParams(ex).getOrDefault("texto", "");
+                String b64 = CriptografiaXOR.cifrarTextoBase64(texto);
+                sendJson(ex, 200, "{\"original\":" + jstr(texto)
+                        + ",\"cifradoHex\":" + jstr(CriptografiaXOR.hexCifrado(texto))
+                        + ",\"cifradoBase64\":" + jstr(b64)
+                        + ",\"decifrado\":" + jstr(CriptografiaXOR.decifrarTextoBase64(b64))
+                        + ",\"metodo\":" + jstr("XOR de chave repetida (simétrico)")
+                        + "}");
+                return;
+            }
+
+            if (partes.length == 2 && partes[0].equals("usuario")) {
+                int id = Integer.parseInt(partes[1]);
+                Usuario u = usuarioCtrl.buscar(id);
+                if (u == null) { sendError(ex, 404, "Usuário não encontrado"); return; }
+                String email = u.getEmail() == null ? "" : u.getEmail();
+                sendJson(ex, 200, "{\"id\":" + u.getId()
+                        + ",\"campo\":" + jstr("Usuario.email")
+                        + ",\"emailClaro\":" + jstr(email)
+                        + ",\"emailCifradoHex\":" + jstr(CriptografiaXOR.hexCifrado(email))
+                        + ",\"emailCifradoBase64\":" + jstr(CriptografiaXOR.cifrarTextoBase64(email))
+                        + ",\"observacao\":" + jstr("Os bytes em emailCifradoHex são exatamente os gravados em usuario.db")
+                        + "}");
+                return;
+            }
+
+            sendError(ex, 404, "Rota inválida (use /api/seguranca/demo?texto=... ou /api/seguranca/usuario/{id})");
+        } catch (IllegalArgumentException iae) {
+            sendError(ex, 400, iae.getMessage());
+        } catch (Exception e) {
+            sendError(ex, 500, e.getMessage());
+        }
+    }
+
+    /** Parser simples de query string (?a=b&c=d) com URL-decode UTF-8. */
+    private static Map<String, String> queryParams(HttpExchange ex) {
+        Map<String, String> m = new LinkedHashMap<>();
+        String q = ex.getRequestURI().getRawQuery();
+        if (q == null || q.isEmpty()) return m;
+        for (String par : q.split("&")) {
+            int eq = par.indexOf('=');
+            String k = eq >= 0 ? par.substring(0, eq) : par;
+            String v = eq >= 0 ? par.substring(eq + 1) : "";
+            try {
+                k = URLDecoder.decode(k, StandardCharsets.UTF_8);
+                v = URLDecoder.decode(v, StandardCharsets.UTF_8);
+            } catch (Exception ignored) { }
+            m.put(k, v);
+        }
+        return m;
     }
 
     // ====================================================================

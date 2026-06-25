@@ -986,11 +986,81 @@ O campo <code>integridadeOk</code> é retornado pela API e exibido no front-end.
 </ul>
 
 <!-- ================================================================ -->
-<h2>21. Referências</h2>
+<h2>21. Fase V — Casamento de Padrões e Criptografia</h2>
+
+<h3>21.1 Visão Geral</h3>
+<p>A Fase V acrescenta dois algoritmos de <strong>casamento exato de padrões</strong> — <strong>KMP</strong>
+e <strong>Boyer-Moore</strong> — aplicados ao campo textual <code>Alimento.nome</code>, e <strong>criptografia
+XOR</strong> sobre o campo sensível <code>Usuario.email</code>. Os algoritmos ficam no pacote
+<code>app.busca</code> e a cifra em <code>app.seguranca</code>.</p>
+
+<h3>21.2 Campo Escolhido</h3>
+<p>O campo <code>Alimento.nome</code> foi escolhido por ser o texto mais consultado da base e por permitir
+busca por <strong>subcadeia</strong> em qualquer posição — algo que a Árvore B+ da Fase III (busca ordenada /
+por prefixo) não cobre. A comparação é <strong>insensível a maiúsculas/minúsculas e a acentos</strong>
+(normalização <em>NFD</em> + remoção de diacríticos + <em>lowercase</em>), mantendo os algoritmos puros
+(operando sobre <code>char[]</code>) e deixando a normalização na camada de serviço (<code>BuscaService</code>).</p>
+
+<h3>21.3 Algoritmo KMP (Knuth-Morris-Pratt)</h3>
+<p>Implementado em <code>app.busca.KMP</code>, com complexidade <strong>O(n + m)</strong>. Baseia-se no
+<strong>vetor de falha</strong> <code>lps</code>: <code>lps[i]</code> é o comprimento do maior prefixo próprio
+de <code>padrao[0..i]</code> que também é seu sufixo. Na busca, ao desacasar na posição <code>k</code>, o
+padrão desliza para <code>lps[k-1]</code> sem retroceder o ponteiro do texto; ao casar o padrão inteiro,
+registra a ocorrência e segue de <code>lps[m-1]</code> (detectando ocorrências sobrepostas). Cada caractere
+do texto é comparado no máximo duas vezes.</p>
+
+<h3>21.4 Algoritmo Boyer-Moore</h3>
+<p>Implementado em <code>app.busca.BoyerMoore</code>, compara a janela <strong>da direita para a esquerda</strong>
+e combina duas heurísticas:</p>
+<ul>
+  <li><strong>Bad Character (obrigatória):</strong> alinha o caractere que desacasou com sua última ocorrência
+  no padrão (ou pula a janela inteira se ausente). Implementada com <code>Map&lt;Character,Integer&gt;</code>,
+  válida para qualquer alfabeto.</li>
+  <li><strong>Good Suffix (opcional, também implementada):</strong> quando um sufixo já casou, desloca para a
+  próxima ocorrência desse sufixo (ou de um prefixo que seja seu sufixo), via vetor <code>suff</code>.</li>
+</ul>
+<p>Aplica-se o <strong>maior</strong> dos dois saltos a cada desacasamento. No caso médio é <strong>sublinear</strong>:
+buscar <code>"cozid"</code> na base de demonstração custou ~35 comparações (Boyer-Moore) contra ~145 (KMP).</p>
+
+<table>
+  <thead><tr><th>Aspecto</th><th>KMP</th><th>Boyer-Moore</th></tr></thead>
+  <tbody>
+    <tr><td>Direção da comparação</td><td>esquerda → direita</td><td>direita → esquerda</td></tr>
+    <tr><td>Pré-processamento</td><td>vetor de falha (LPS), O(m)</td><td>bad character + good suffix, O(m + |Σ|)</td></tr>
+    <tr><td>Complexidade de busca</td><td>O(n + m)</td><td>O(nm) pior caso; sublinear no caso médio</td></tr>
+    <tr><td>Ponto forte</td><td>nunca retrocede no texto</td><td>salta vários caracteres por desacasamento</td></tr>
+  </tbody>
+</table>
+
+<h3>21.5 Interface de Pesquisa</h3>
+<ul>
+  <li><strong>Console:</strong> opção <code>6) Pesquisar por padrão (KMP / BM)</code> — o usuário escolhe o
+  algoritmo, informa o padrão e recebe os registros encontrados + métricas.</li>
+  <li><strong>API REST:</strong> <code>GET /api/busca?padrao={texto}&amp;algoritmo={kmp|bm}</code>.</li>
+  <li><strong>Front-end:</strong> aba <em>Busca por Padrão</em>, com seleção de algoritmo, destaque do padrão
+  no resultado, painel de métricas (comparações de caractere e tempo) e comparativo KMP × Boyer-Moore.</li>
+</ul>
+
+<h3>21.6 Criptografia XOR</h3>
+<p>O campo sensível <code>Usuario.email</code> (dado pessoal / PII) é gravado <strong>cifrado em repouso</strong>
+no arquivo <code>usuario.db</code> e decifrado apenas em memória — transparente para controllers, JSON e busca.
+O método é a cifra <strong>XOR de chave repetida</strong> (simétrica), implementada em
+<code>app.seguranca.CriptografiaXOR</code>:</p>
+<pre><code>cifrado[i] = claro[i]   XOR  chave[i mod |chave|]
+claro[i]   = cifrado[i] XOR  chave[i mod |chave|]</code></pre>
+<p>Como o XOR é a sua própria inversa, a mesma rotina cifra e decifra; aplicado byte a byte, preserva o tamanho
+do dado. A cifra/decifra ocorre apenas no <code>toByteArray</code>/<code>fromByteArray</code> de <code>Usuario</code>.
+Verificação: ao inspecionar <code>usuario.db</code>, o nome aparece legível mas a sequência de bytes do e-mail
+está embaralhada (o texto do domínio não existe em claro no arquivo). <em>Observação:</em> método didático;
+em produção usar-se-ia AES/ChaCha20 com a chave fora do código-fonte.</p>
+
+<!-- ================================================================ -->
+<h2>22. Referências</h2>
 
 <ol class="referencias">
   <li>ZIVIANI, N. <em>Projeto de Algoritmos com Implementações em Java e C++</em>. 3ª ed. Cengage Learning, 2010.</li>
   <li>CORMEN, T. H. et al. <em>Introduction to Algorithms</em>. 4th ed. MIT Press, 2022.</li>
+  <li>CHARRAS, C.; LECROQ, T. <em>Handbook of Exact String Matching Algorithms</em>. King's College Publications, 2004.</li>
   <li>Oracle. <em>Java SE Documentation</em>. Disponível em: https://docs.oracle.com/en/java/. Acesso em: mar. 2026.</li>
 </ol>
 

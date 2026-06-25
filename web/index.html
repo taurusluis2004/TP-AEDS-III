@@ -59,6 +59,16 @@
         <span>Backup &amp; Compressão</span>
         <span class="pill">IV</span>
       </button>
+      <button class="menu-item" data-view="busca">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        <span>Busca por Padrão</span>
+        <span class="pill">V</span>
+      </button>
+      <button class="menu-item" data-view="seguranca">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Segurança</span>
+        <span class="pill">XOR</span>
+      </button>
 
       <div class="menu-section">Entregas</div>
 
@@ -76,6 +86,11 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6M9 9h2"/></svg>
         <span>Formulário Fase 4</span>
         <span class="pill">Huffman · LZW</span>
+      </button>
+      <button class="menu-item" data-view="formulario5">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6M9 9h2"/></svg>
+        <span>Formulário Fase 5</span>
+        <span class="pill">KMP · BM · XOR</span>
       </button>
       <a class="menu-item" href="pdf-formulario4.html" target="_blank">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M5 12h14"/><path d="M12 5v14"/></svg>
@@ -733,6 +748,115 @@ offset 8+    : páginas de tamanho fixo
         </div>
       </section>
 
+      <!-- ================ BUSCA POR PADRÃO (FASE V) ================ -->
+      <section class="view" id="view-busca">
+        <div class="page-head">
+          <div>
+            <h1>Busca por Padrão <span class="chip chip-primary">Fase 5 · KMP &amp; Boyer-Moore</span></h1>
+            <p class="muted">Casamento exato de padrões aplicado ao campo <code>Alimento.nome</code> — insensível a maiúsculas/minúsculas e acentos.</p>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <h3>Pesquisar</h3>
+              <p class="muted">Escolha o algoritmo, informe o padrão (texto) e veja os registros encontrados + as métricas de execução.</p>
+            </div>
+          </div>
+          <form class="form-grid" id="form-busca">
+            <div class="field"><label>Algoritmo</label>
+              <select name="algoritmo" id="busca-algoritmo" class="select">
+                <option value="kmp">KMP (Knuth-Morris-Pratt)</option>
+                <option value="bm">Boyer-Moore (bad character + good suffix)</option>
+              </select>
+            </div>
+            <div class="field"><label>Padrão</label>
+              <input name="padrao" id="busca-padrao" placeholder="Ex: frango, cozid, leite…" autocomplete="off"/>
+            </div>
+            <div class="modal-actions full">
+              <button type="button" class="btn-ghost" id="btn-busca-comparar">Comparar KMP × BM</button>
+              <button type="submit" class="btn-primary">Pesquisar</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="kpi-grid" id="busca-metricas" style="display:none;">
+          <div class="kpi card"><div><div class="kpi-label">Algoritmo</div><div class="kpi-value" id="m-algoritmo" style="font-size:1.3rem;">—</div></div></div>
+          <div class="kpi card"><div><div class="kpi-label">Encontrados / varridos</div><div class="kpi-value" id="m-encontrados" style="font-size:1.3rem;">—</div></div></div>
+          <div class="kpi card"><div><div class="kpi-label">Comparações de caractere</div><div class="kpi-value" id="m-comparacoes" style="font-size:1.3rem;">—</div></div></div>
+          <div class="kpi card"><div><div class="kpi-label">Tempo</div><div class="kpi-value" id="m-tempo" style="font-size:1.3rem;">—</div></div></div>
+        </div>
+
+        <div class="card no-pad" id="busca-resultado-card" style="display:none;">
+          <table class="data-table" id="tabela-busca">
+            <thead><tr><th>#</th><th>Alimento (padrão destacado)</th><th>Ocorrências</th><th>Posições</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <div class="empty hidden" id="empty-busca">Nenhum alimento com esse padrão no nome.</div>
+        </div>
+
+        <div class="card" id="busca-comparativo" style="display:none;">
+          <div class="card-head">
+            <div>
+              <h3>Comparativo KMP × Boyer-Moore</h3>
+              <p class="muted">Mesmo padrão, mesma base — número de comparações de caractere realizadas por cada algoritmo.</p>
+            </div>
+          </div>
+          <pre id="resultado-comparativo" class="resultado"></pre>
+        </div>
+      </section>
+
+      <!-- ================ SEGURANÇA / CRIPTOGRAFIA (FASE V) ================ -->
+      <section class="view" id="view-seguranca">
+        <div class="page-head">
+          <div>
+            <h1>Segurança <span class="chip chip-primary">Fase 5 · Criptografia XOR</span></h1>
+            <p class="muted">O campo sensível <code>Usuario.email</code> é gravado <strong>cifrado</strong> no arquivo binário e decifrado apenas em memória.</p>
+          </div>
+        </div>
+
+        <div class="checklist-card card">
+          <h3>🔐 Como funciona</h3>
+          <ul class="checklist">
+            <li><b>Método:</b> XOR de chave repetida (cifra simétrica) — <code>cifrado[i] = claro[i] ⊕ chave[i mod |chave|]</code>.</li>
+            <li><b>Campo protegido:</b> <code>Usuario.email</code> (dado pessoal / PII).</li>
+            <li><b>Em repouso:</b> os bytes do e-mail em <code>usuario.db</code> ficam ilegíveis; o nome (não sensível) permanece em claro.</li>
+            <li><b>Reversível:</b> a mesma operação cifra e decifra (XOR é a sua própria inversa).</li>
+          </ul>
+        </div>
+
+        <div class="grid-2">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h3>Demonstração da cifra</h3>
+                <p class="muted">Digite um texto e veja-o cifrado (hex/Base64) e decifrado de volta.</p>
+              </div>
+            </div>
+            <div class="filter-bar">
+              <input id="cripto-texto" class="select" style="flex:1;" placeholder="Ex: segredo@email.com" autocomplete="off"/>
+              <button class="btn-primary" id="btn-cripto-demo">Cifrar</button>
+            </div>
+            <pre id="resultado-cripto-demo" class="resultado">// digite um texto e clique em "Cifrar"</pre>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <h3>E-mail de um usuário em disco</h3>
+                <p class="muted">Compara o e-mail em claro (memória) com os bytes cifrados gravados no arquivo.</p>
+              </div>
+            </div>
+            <div class="filter-bar">
+              <select id="cripto-usuario" class="select"></select>
+              <button class="btn-primary" id="btn-cripto-usuario">Mostrar</button>
+            </div>
+            <pre id="resultado-cripto-usuario" class="resultado"></pre>
+          </div>
+        </div>
+      </section>
+
       <!-- ================ FORMULÁRIO FASE 4 ================ -->
       <section class="view" id="view-formulario4">
         <div class="page-head">
@@ -792,6 +916,103 @@ offset 8+    : páginas de tamanho fixo
               <li><b>LZW — sincronizar o dicionário:</b> compressor e descompressor precisam construir dicionários idênticos. Resolvido parando o crescimento exatamente no mesmo limite (65.536 entradas) e tratando o caso especial <em>KwKwK</em> (código ainda não presente no dicionário do leitor).</li>
               <li><b>Integridade:</b> garantir que nada se perde. Resolvido com verificação <em>round-trip</em> automática (comprime → descomprime → compara byte a byte) antes de gravar o arquivo de backup.</li>
             </ul>
+          </article>
+        </div>
+      </section>
+
+      <!-- ================ FORMULÁRIO FASE 5 ================ -->
+      <section class="view" id="view-formulario5">
+        <div class="page-head">
+          <div>
+            <h1>Formulário de Projeto <span class="chip chip-primary">Fase 5</span></h1>
+            <p class="muted">Respostas oficiais às 7 questões da Fase V (Casamento de Padrões KMP/Boyer-Moore e Criptografia XOR).</p>
+          </div>
+          <div class="page-head-actions">
+            <button class="btn-ghost" onclick="window.print()">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+              <span>Imprimir / PDF</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="checklist-card card">
+          <h3>✅ Checklist Fase V</h3>
+          <ul class="checklist">
+            <li><b>KMP implementado do zero</b> · <code>app.busca.KMP</code> (vetor de falha + busca O(n+m))</li>
+            <li><b>Boyer-Moore implementado do zero</b> · <code>app.busca.BoyerMoore</code> (bad character <em>e</em> good suffix)</li>
+            <li><b>Aplicados a um campo textual</b> · <code>Alimento.nome</code> (insensível a maiúsc./acentos)</li>
+            <li><b>Interface de pesquisa</b> · menu no console (opção 6) + tela web + API <code>GET /api/busca</code></li>
+            <li><b>Usuário escolhe o algoritmo</b> e informa o padrão; o sistema retorna os registros encontrados</li>
+            <li><b>Criptografia XOR</b> · campo sensível <code>Usuario.email</code> cifrado em repouso (<code>app.seguranca.CriptografiaXOR</code>)</li>
+            <li><b>Métricas didáticas</b> · contagem de comparações de caractere e tempo por busca</li>
+          </ul>
+        </div>
+
+        <div class="qa-list">
+          <article class="qa card">
+            <div class="qa-marker">1</div>
+            <h2>Qual campo textual foi escolhido para os algoritmos de casamento de padrões? Por quê?</h2>
+            <p>O campo <strong><code>Alimento.nome</code></strong>. É o campo textual mais consultado da base — o usuário tipicamente procura alimentos pelo nome — e é um texto livre em que o padrão pode aparecer em <em>qualquer posição</em>.</p>
+            <p>Essa busca por <strong>subcadeia</strong> complementa a <strong>Árvore B+</strong> da Fase III, que resolve apenas consulta <em>ordenada / por prefixo</em>. Com KMP/Boyer-Moore conseguimos encontrar o padrão no meio do nome (ex.: o padrão <code>"leite"</code> dentro de <code>"Bebida láctea com leite"</code>, ou <code>"cozid"</code> em <code>"Arroz Branco Cozido"</code> e <code>"Batata Doce Cozida"</code>). A comparação é normalizada (sem acento, minúsculas) para uma experiência de busca natural.</p>
+          </article>
+
+          <article class="qa card">
+            <div class="qa-marker">2</div>
+            <h2>Explique o funcionamento do KMP implementado</h2>
+            <p>O <strong>KMP (Knuth-Morris-Pratt)</strong> tem complexidade <strong>O(n + m)</strong> e nunca retrocede o ponteiro do texto. Ele se baseia no <strong>vetor de falha</strong> (<code>lps</code>): para cada posição <code>i</code> do padrão, <code>lps[i]</code> guarda o comprimento do maior prefixo próprio de <code>padrao[0..i]</code> que também é sufixo desse trecho.</p>
+            <p><b>Pré-processamento</b> (método <code>vetorFalha</code>): percorre o padrão mantendo o tamanho da maior borda; ao desacasar, recua para <code>lps[k-1]</code> — em O(m).</p>
+            <p><b>Busca</b> (método <code>buscar</code>): compara texto e padrão; em caso de igualdade avança ambos; ao casar o padrão inteiro registra a ocorrência e continua de <code>lps[m-1]</code> (acha ocorrências sobrepostas); ao desacasar com <code>k&gt;0</code>, desliza o padrão para <code>lps[k-1]</code> <em>sem mover o texto</em>; com <code>k=0</code>, avança no texto. Assim cada caractere do texto é comparado no máximo duas vezes.</p>
+          </article>
+
+          <article class="qa card">
+            <div class="qa-marker">3</div>
+            <h2>Explique o funcionamento do Boyer-Moore implementado</h2>
+            <p>O <strong>Boyer-Moore</strong> compara o padrão com a janela do texto <strong>da direita para a esquerda</strong> e usa <strong>duas heurísticas</strong> para pular caracteres (no caso médio é <em>sublinear</em>):</p>
+            <ul>
+              <li><b>Bad Character (obrigatória):</b> ao desacasar no caractere <code>c</code> do texto, desloca o padrão para alinhar <code>c</code> com a sua última ocorrência no padrão; se <code>c</code> não existe no padrão, pula a janela inteira. A tabela é construída em <code>tabelaBadCharacter</code> (um <code>Map</code> caractere → deslocamento, válido para qualquer alfabeto).</li>
+              <li><b>Good Suffix (também implementada):</b> quando um sufixo já casou antes do desacasamento, desloca para a próxima ocorrência desse sufixo (ou de um prefixo do padrão que seja seu sufixo). Usa o vetor <code>suff</code> e as tabelas de <code>tabelaGoodSuffix</code>.</li>
+            </ul>
+            <p>A cada desacasamento aplica-se o <strong>maior</strong> dos dois saltos, garantindo correção e o maior avanço possível. No exemplo real da base, buscar <code>"cozid"</code> exigiu <strong>~35 comparações</strong> no Boyer-Moore contra <strong>~145</strong> de uma varredura equivalente em KMP — evidência prática dos saltos sublineares.</p>
+          </article>
+
+          <article class="qa card">
+            <div class="qa-marker">4</div>
+            <h2>Descreva como integrou os algoritmos ao sistema</h2>
+            <p>Os algoritmos ficam no pacote <code>app.busca</code> (<code>KMP</code>, <code>BoyerMoore</code>), puros (operam sobre <code>char[]</code>). O serviço <code>BuscaService</code> varre todos os registros ativos via <code>AlimentoDAO.listar()</code>, normaliza nome e padrão (sem acento, minúsculas) e aplica o algoritmo escolhido, devolvendo um <code>ResultadoBusca</code> com os registros encontrados, posições e métricas (comparações e tempo).</p>
+            <p>A interface de pesquisa está disponível em três frentes:</p>
+            <ul>
+              <li><b>Console:</b> opção <code>6) Pesquisar por padrão (KMP / BM)</code> — escolhe o algoritmo, informa o padrão, recebe os registros.</li>
+              <li><b>API REST:</b> <code>GET /api/busca?padrao=&lt;texto&gt;&amp;algoritmo=&lt;kmp|bm&gt;</code>.</li>
+              <li><b>Web (SPA):</b> esta aba <em>Busca por Padrão</em>, com seleção de algoritmo, destaque do padrão e painel de métricas.</li>
+            </ul>
+          </article>
+
+          <article class="qa card">
+            <div class="qa-marker">5</div>
+            <h2>Quais dificuldades encontrou na implementação dos dois algoritmos?</h2>
+            <ul>
+              <li><b>KMP — vetor de falha:</b> acertar a recorrência <code>k = lps[k-1]</code> sem voltar o índice do texto. Resolvido seguindo a definição formal de prefixo-sufixo e testando com ocorrências sobrepostas.</li>
+              <li><b>Boyer-Moore — good suffix:</b> a pré-computação (vetor <code>suff</code> + dois casos da tabela) é a parte mais delicada. Resolvido seguindo a referência clássica de Charras &amp; Lecroq e validando o salto combinado com bad character.</li>
+              <li><b>Alfabeto da bad character:</b> usar um vetor de 65.536 posições desperdiça memória. Resolvido com um <code>Map&lt;Character,Integer&gt;</code> e deslocamento padrão <code>m</code> para caracteres ausentes.</li>
+              <li><b>Acentos e caixa:</b> "açúcar" deveria casar com "acucar". Resolvido normalizando (NFD + remoção de diacríticos + minúsculas) na camada de serviço, mantendo os algoritmos puros.</li>
+              <li><b>Múltiplas ocorrências e métricas:</b> retornar todas as posições e contar comparações para comparar a eficiência dos dois algoritmos.</li>
+            </ul>
+          </article>
+
+          <article class="qa card">
+            <div class="qa-marker">6</div>
+            <h2>Qual campo foi utilizado na criptografia?</h2>
+            <p>O campo <strong><code>Usuario.email</code></strong>, por ser um <strong>dado pessoal sensível (PII)</strong>. Ele é gravado <strong>cifrado</strong> no arquivo binário <code>usuario.db</code> e só é decifrado ao carregar o registro em memória — de forma transparente para o restante do sistema (controllers, JSON e a própria busca enxergam sempre o texto claro).</p>
+            <p>Verificação: ao inspecionar <code>usuario.db</code>, o nome (não sensível) aparece legível, mas a sequência de bytes do e-mail está embaralhada — o texto <code>"@nutritrack..."</code> não existe em claro no arquivo. Veja a aba <em>Segurança</em> para a demonstração.</p>
+          </article>
+
+          <article class="qa card">
+            <div class="qa-marker">7</div>
+            <h2>Qual foi o método utilizado na criptografia?</h2>
+            <p>Cifra <strong>XOR de chave repetida</strong> (cifra simétrica, variante de Vigenère sobre bytes), implementada do zero em <code>app.seguranca.CriptografiaXOR</code>:</p>
+            <pre><code>cifrado[i] = claro[i]   XOR  chave[i mod |chave|]
+claro[i]   = cifrado[i] XOR  chave[i mod |chave|]</code></pre>
+            <p>O XOR é a sua própria inversa (<code>(x ⊕ k) ⊕ k = x</code>), então a <strong>mesma</strong> rotina cifra e decifra. Aplicado byte a byte, <strong>preserva o tamanho</strong> do dado — conveniente para cifrar um campo persistido sem alterar o cálculo de espaço dos registros. <em>Observação:</em> é um método didático adequado ao escopo da disciplina; em produção usaríamos AES/ChaCha20 com a chave vinda de um cofre de segredos, e não fixa no código.</p>
           </article>
         </div>
       </section>

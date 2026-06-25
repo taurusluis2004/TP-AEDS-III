@@ -1,4 +1,4 @@
-# NutriTrack — TP AEDS III (Fases 1, 2, 3 e 4)
+# NutriTrack — TP AEDS III (Fases 1, 2, 3, 4 e 5)
 
 Sistema de **gerenciamento de consumo nutricional** com persistência em **arquivos
 binários** (cabeçalho + lápide + lista de espaços livres), **índices em Hash Extensível**
@@ -47,6 +47,14 @@ e **Árvore B+** para consultas ordenadas.
 - Front-end com novas telas: *Backup & Compressão* (gerar / baixar / restaurar + taxa) e *Formulário Fase 4* (3 questões)
 - API REST: `/api/backup` · menu de console: opção **5) Backup / Compressão**
 
+### Fase 5 — Casamento de Padrões e Criptografia
+- **KMP (Knuth-Morris-Pratt)** implementado do zero (`app.busca.KMP`) — vetor de falha (LPS) + busca em **O(n + m)**, retornando todas as ocorrências
+- **Boyer-Moore** implementado do zero (`app.busca.BoyerMoore`) com as **duas** heurísticas: **bad character** (obrigatória) e **good suffix** (opcional)
+- Algoritmos aplicados ao campo textual **`Alimento.nome`** — busca por subcadeia **insensível a maiúsculas/minúsculas e acentos** (complementa a B+ da Fase III, que faz busca ordenada/por prefixo)
+- **Interface de pesquisa** em três frentes: menu de console (**opção 6**), API REST (`GET /api/busca`) e tela web *Busca por Padrão* — o usuário **escolhe o algoritmo**, informa o **padrão** e recebe os **registros encontrados** + métricas (comparações de caractere e tempo)
+- **Criptografia XOR** (`app.seguranca.CriptografiaXOR`) no campo sensível **`Usuario.email`** (dado pessoal) — gravado **cifrado em repouso** no `usuario.db` e decifrado apenas em memória
+- Front-end com novas telas: *Busca por Padrão*, *Segurança* (demonstração da cifra) e *Formulário Fase 5* (7 questões)
+
 ---
 
 ##  Estrutura
@@ -87,6 +95,15 @@ TP-AEDS-III/
 │   ├── Backup.java                       # empacotador (TAR) de ./dados
 │   ├── CompressaoService.java            # orquestra empacotar + comprimir + verificar
 │   └── ResultadoCompressao.java          # tamanhos, taxa e integridade
+├── src/app/busca/                         # Fase 5 — casamento de padrões
+│   ├── KMP.java                          # Knuth-Morris-Pratt (vetor de falha + busca)
+│   ├── BoyerMoore.java                   # Boyer-Moore (bad character + good suffix)
+│   ├── BuscaService.java                 # aplica KMP/BM em Alimento.nome + métricas
+│   ├── ResultadoBusca.java               # resultado agregado (registros + comparações)
+│   ├── ItemEncontrado.java               # 1 registro encontrado (id, posições)
+│   └── ResultadoCasamento.java           # posições + comparações de uma execução
+├── src/app/seguranca/                     # Fase 5 — criptografia
+│   └── CriptografiaXOR.java              # cifra XOR de chave repetida (campo email)
 ├── backups/                              # gerado em runtime (arquivos compactados)
 └── web/
     ├── index.html  app.js  styles.css    # SPA
@@ -152,6 +169,9 @@ java -cp out app.Servidor   # ou app.ConsoleApp / app.Main
 | **POST** | **`/api/backup/lzw`** | **gera o backup compactado com LZW + taxa** |
 | **GET** | **`/api/backup/download/{huffman\|lzw}`** | **baixa o arquivo único compactado** |
 | **POST** | **`/api/backup/restaurar/{huffman\|lzw}`** | **restaura o backup em `./dados_restaurado/`** |
+| **GET** | **`/api/busca?padrao={texto}&algoritmo={kmp\|bm}`** | **Fase V — casamento de padrões em `Alimento.nome` (KMP/Boyer-Moore)** |
+| **GET** | **`/api/seguranca/demo?texto={texto}`** | **Fase V — demonstração da cifra XOR (cifra/decifra)** |
+| **GET** | **`/api/seguranca/usuario/{id}`** | **Fase V — e-mail em claro × bytes cifrados gravados em disco** |
 
 ---
 
@@ -250,6 +270,89 @@ irm -Method Post http://localhost:8080/api/backup/restaurar/huffman
 - **Huffman / símbolo único:** arquivo com um só byte distinto gera árvore de um nó → tratamento especial (código “0”).
 - **LZW / sincronizar dicionário:** compressor e descompressor param de crescer no mesmo limite (65.536) e tratam o caso especial *KwKwK*.
 - **Integridade:** verificação **round-trip** automática (comprime → descomprime → compara) antes de gravar.
+
+---
+
+##  Fase V — Casamento de Padrões (KMP / Boyer-Moore) e Criptografia
+
+Dois algoritmos de casamento exato de padrões aplicados ao campo textual
+**`Alimento.nome`**, mais **criptografia XOR** do campo sensível **`Usuario.email`**.
+
+### Pela interface web
+1. Inicie o servidor (`java -cp out app.Servidor`) e abra `http://localhost:8080`.
+2. Abra **Busca por Padrão**: escolha **KMP** ou **Boyer-Moore**, digite o padrão (ex.: `frango`, `cozid`, `leite`) e clique em **Pesquisar**. Use **Comparar KMP × BM** para ver o número de comparações de cada um.
+3. Abra **Segurança**: cifre/decifre um texto e veja o e-mail de um usuário em claro × cifrado (como fica em disco).
+
+### Pelo console
+```powershell
+java -cp out app.ConsoleApp
+#  -> 6) Pesquisar por padrão (KMP / BM)
+#         escolhe o algoritmo (1=KMP, 2=Boyer-Moore), informa o padrão, vê os registros
+#  -> 7) Criptografia (campo sensível: e-mail)
+#         demonstra a cifra/decifra e mostra o e-mail cifrado em disco
+```
+
+### Pela API (com o servidor rodando)
+```powershell
+# casamento de padrões (KMP)
+irm "http://localhost:8080/api/busca?padrao=frango&algoritmo=kmp"
+# casamento de padrões (Boyer-Moore)
+irm "http://localhost:8080/api/busca?padrao=cozid&algoritmo=bm"
+
+# criptografia: demonstração da cifra
+irm "http://localhost:8080/api/seguranca/demo?texto=segredo@email.com"
+# criptografia: e-mail em claro x bytes cifrados gravados em disco
+irm "http://localhost:8080/api/seguranca/usuario/1"
+```
+
+### Formulário técnico (Fase V)
+
+**1. Qual campo textual foi escolhido? Por quê?**
+`Alimento.nome` — é o campo textual mais consultado da base (o usuário procura alimentos pelo nome)
+e é texto livre em que o padrão pode aparecer em qualquer posição. Resolve a busca por **subcadeia**,
+complementando a Árvore B+ da Fase III (que faz apenas busca **ordenada / por prefixo**). A comparação é
+**insensível a maiúsculas/minúsculas e acentos** (normalização NFD + remoção de diacríticos + minúsculas).
+
+**2. Funcionamento do KMP**
+Complexidade **O(n + m)**; o ponteiro do texto nunca retrocede. Usa o **vetor de falha** `lps`, em que
+`lps[i]` é o comprimento do maior prefixo próprio de `padrao[0..i]` que também é sufixo. Ao desacasar na
+posição `k`, o padrão desliza para `lps[k-1]` reaproveitando o que já casou; ao casar o padrão inteiro,
+registra a ocorrência e continua de `lps[m-1]` (acha ocorrências sobrepostas). Pré-processamento em O(m),
+busca em O(n). Arquivo: `app.busca.KMP` (`vetorFalha` + `buscar`).
+
+**3. Funcionamento do Boyer-Moore**
+Compara a janela **da direita para a esquerda** e usa duas heurísticas:
+- **Bad Character (obrigatória):** alinha o caractere que desacasou com sua última ocorrência no padrão
+  (ou pula a janela inteira se ele não existe). Tabela em `tabelaBadCharacter` (`Map` caractere → salto).
+- **Good Suffix (opcional, também implementada):** quando um sufixo já casou, desloca para a próxima
+  ocorrência desse sufixo (ou de um prefixo que seja seu sufixo). Usa o vetor `suff` (`tabelaGoodSuffix`).
+
+A cada desacasamento aplica-se o **maior** dos dois saltos. No caso médio é **sublinear** — buscar `cozid`
+na base de demonstração custou **~35 comparações** (BM) contra **~145** (KMP). Arquivo: `app.busca.BoyerMoore`.
+
+**4. Como integrou os algoritmos ao sistema**
+Pacote `app.busca`: `KMP` e `BoyerMoore` são puros (operam sobre `char[]`). `BuscaService` varre os
+registros via `AlimentoDAO.listar()`, normaliza nome e padrão, aplica o algoritmo escolhido e devolve um
+`ResultadoBusca` com os registros encontrados, posições e métricas. Exposto no **console** (opção 6), na
+**API** (`GET /api/busca`) e na **tela web** *Busca por Padrão*.
+
+**5. Dificuldades encontradas**
+- KMP: acertar a recorrência `k = lps[k-1]` sem retroceder o índice do texto (validado com ocorrências sobrepostas).
+- Boyer-Moore: a pré-computação do *good suffix* (vetor `suff` + dois casos) é delicada — seguiu-se a referência clássica de Charras & Lecroq.
+- Bad character para alfabeto grande: `Map<Character,Integer>` em vez de vetor de 65.536 posições.
+- Acentos/caixa: normalização (NFD) na camada de serviço, mantendo os algoritmos puros.
+- Múltiplas ocorrências + métricas: retornar todas as posições e contar comparações para comparar os algoritmos.
+
+**6. Qual campo foi utilizado na criptografia?**
+`Usuario.email` — dado pessoal (PII). É gravado **cifrado** no arquivo `usuario.db` e decifrado apenas em
+memória (transparente para controllers, JSON e busca). No arquivo, o nome aparece legível mas o e-mail não:
+o texto `"@nutritrack..."` não existe em claro no `.db`.
+
+**7. Qual foi o método utilizado na criptografia?**
+**XOR de chave repetida** (cifra simétrica): `cifrado[i] = claro[i] XOR chave[i mod |chave|]`. O XOR é a
+sua própria inversa, então a mesma rotina cifra e decifra; aplicado byte a byte, preserva o tamanho do dado.
+Arquivo: `app.seguranca.CriptografiaXOR`. *(Método didático; em produção usar-se-ia AES/ChaCha20 com a chave
+fora do código.)*
 
 ---
 

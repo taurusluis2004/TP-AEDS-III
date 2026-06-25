@@ -1,6 +1,9 @@
 # Saída de compilação Java
 out/
 
+# Dados binários de runtime (re-gerados pelo seed.ps1)
+dados/
+
 # Artefatos de runtime
 backups/
 dados_restaurado/

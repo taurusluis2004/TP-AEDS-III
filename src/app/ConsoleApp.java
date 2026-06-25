@@ -1,5 +1,8 @@
 package app;
 
+import app.busca.BuscaService;
+import app.busca.ItemEncontrado;
+import app.busca.ResultadoBusca;
 import app.controller.AlimentoController;
 import app.controller.ConsumoController;
 import app.controller.RefeicaoController;
@@ -12,6 +15,7 @@ import app.model.Alimento;
 import app.model.Consumo;
 import app.model.Refeicao;
 import app.model.Usuario;
+import app.seguranca.CriptografiaXOR;
 import java.time.LocalDate;
 import java.util.*;
 
@@ -59,6 +63,8 @@ public class ConsoleApp {
                 System.out.println("3) Refeição (CRUD)");
                 System.out.println("4) Consumo (CRUD / vínculo Refeição x Alimento)");
                 System.out.println("5) Backup / Compressão (Huffman e LZW)");
+                System.out.println("6) Pesquisar por padrão (KMP / BM)");
+                System.out.println("7) Criptografia (campo sensível: e-mail)");
                 System.out.println("0) Sair");
                 int op = readInt("Escolha: ");
 
@@ -77,6 +83,12 @@ public class ConsoleApp {
                         break;
                     case 5:
                         menuBackup();
+                        break;
+                    case 6:
+                        menuBusca();
+                        break;
+                    case 7:
+                        menuCriptografia();
                         break;
                     case 0:
                         close();
@@ -537,10 +549,97 @@ public class ConsoleApp {
         }
     }
 
+    // ===== Pesquisa por Padrão (Fase V — KMP / Boyer-Moore) =====
+    private void menuBusca() throws Exception {
+        System.out.println("\n--- Pesquisar por padrão (Fase V) ---");
+        System.out.println("Campo pesquisado: " + BuscaService.CAMPO
+                + "  (insensível a maiúsculas/minúsculas e acentos)");
+        System.out.println("Algoritmo:");
+        System.out.println("  1) KMP (Knuth-Morris-Pratt)");
+        System.out.println("  2) Boyer-Moore (bad character + good suffix)");
+        int escolha = readInt("Escolha o algoritmo (1/2): ");
+        BuscaService.Algoritmo algo;
+        try {
+            algo = BuscaService.Algoritmo.de(String.valueOf(escolha));
+        } catch (IllegalArgumentException e) {
+            System.out.println("❌ " + e.getMessage());
+            return;
+        }
+
+        String padrao = readStr("Padrão a procurar: ");
+
+        try {
+            ResultadoBusca r = BuscaService.buscarAlimentosPorNome(alimentoDAO, padrao, algo);
+            System.out.println("\n===== Resultado da busca =====");
+            System.out.println("Algoritmo................: " + r.algoritmo);
+            System.out.println("Padrão...................: \"" + r.padrao + "\"");
+            System.out.println("Campo....................: " + r.campo);
+            System.out.println("Registros varridos.......: " + r.totalRegistros);
+            System.out.println("Registros encontrados....: " + r.quantidadeEncontrada());
+            System.out.println("Comparações de caractere.: " + r.comparacoes);
+            System.out.printf("Tempo....................: %.3f ms%n", r.milissegundos);
+
+            if (r.encontrados.isEmpty()) {
+                System.out.println("\n(nenhum alimento com esse padrão no nome)");
+            } else {
+                System.out.println("\nAlimentos encontrados:");
+                for (ItemEncontrado item : r.encontrados) {
+                    System.out.println("  #" + item.id + " · " + item.valorCampo
+                            + "   (posições=" + item.posicoes + ", ocorrências=" + item.ocorrencias + ")");
+                }
+            }
+        } catch (IllegalArgumentException e) {
+            System.out.println("❌ " + e.getMessage());
+        }
+    }
+
+    // ===== Criptografia (Fase V — XOR no campo sensível e-mail) =====
+    private void menuCriptografia() throws Exception {
+        while (true) {
+            System.out.println("\n--- Criptografia XOR (Fase V) ---");
+            System.out.println("Campo sensível protegido em repouso: Usuario.email");
+            System.out.println("1) Demonstrar cifra/decifra de um texto");
+            System.out.println("2) Mostrar e-mail de um usuário (claro x cifrado em disco)");
+            System.out.println("0) Voltar");
+            int op = readInt("Escolha: ");
+
+            switch (op) {
+                case 1: {
+                    String texto = readStr("Texto para cifrar: ");
+                    String b64 = CriptografiaXOR.cifrarTextoBase64(texto);
+                    System.out.println("  Original.........: " + texto);
+                    System.out.println("  Cifrado (hex)....: " + CriptografiaXOR.hexCifrado(texto));
+                    System.out.println("  Cifrado (Base64).: " + b64);
+                    System.out.println("  Decifrado........: " + CriptografiaXOR.decifrarTextoBase64(b64));
+                    break;
+                }
+                case 2: {
+                    int id = readInt("ID do usuário: ");
+                    Usuario u = usuarioCtrl.buscar(id);
+                    if (u == null) { System.out.println("❌ Não encontrado."); break; }
+                    System.out.println("  E-mail (em memória, decifrado): " + u.getEmail());
+                    System.out.println("  E-mail (como gravado em disco): " + CriptografiaXOR.hexCifrado(u.getEmail()));
+                    System.out.println("  >> Em usuario.db o campo aparece exatamente como os bytes acima.");
+                    break;
+                }
+                case 0:
+                    return;
+                default:
+                    System.out.println("Opção inválida.");
+                    break;
+            }
+        }
+    }
+
     private void close() throws Exception {
         usuarioDAO.close();
         alimentoDAO.close();
         refeicaoDAO.close();
         consumoDAO.close();
+    }
+
+    /** Ponto de entrada para o CRUD/menus via console. */
+    public static void main(String[] args) throws Exception {
+        new ConsoleApp().run();
     }
 }

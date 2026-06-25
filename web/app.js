@@ -748,6 +748,7 @@ function renderAll() {
   renderConsumos();
   renderFavoritos();
   renderDashboard();
+  popularSelectUsuariosCripto();
 }
 
 loadAll();
@@ -860,4 +861,144 @@ if (backupRefreshBtn) backupRefreshBtn.addEventListener("click", backupStatus);
 
 // carrega o status ao abrir a aba de backup
 $$('.menu-item[data-view="backup"]').forEach(b => b.addEventListener("click", backupStatus));
+
+// ====================================================================
+//  BUSCA POR PADRÃO (FASE V — KMP e Boyer-Moore)
+// ====================================================================
+
+// destaca o padrão no nome (insensível a acentos e maiúsculas), preservando o original
+function destacarPadrao(nome, padrao) {
+  const original = String(nome ?? "");
+  if (!padrao) return escapeHtml(original);
+  const semMarca = (c) => c.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+  let norm = "";
+  const mapa = []; // mapa[k] = índice no original do k-ésimo caractere normalizado
+  for (let i = 0; i < original.length; i++) {
+    for (const ch of semMarca(original[i])) { norm += ch; mapa.push(i); }
+  }
+  const pN = padrao.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+  if (!pN) return escapeHtml(original);
+  const marcado = new Array(original.length).fill(false);
+  let de = 0, idx;
+  while ((idx = norm.indexOf(pN, de)) !== -1) {
+    for (let k = idx; k < idx + pN.length; k++) marcado[mapa[k]] = true;
+    de = idx + pN.length;
+  }
+  let out = "", aberto = false;
+  const ABRE = '<mark style="background:var(--brand,#10b981);color:#04140d;border-radius:3px;padding:0 2px;">';
+  for (let i = 0; i < original.length; i++) {
+    if (marcado[i] && !aberto) { out += ABRE; aberto = true; }
+    if (!marcado[i] && aberto) { out += "</mark>"; aberto = false; }
+    out += escapeHtml(original[i]);
+  }
+  if (aberto) out += "</mark>";
+  return out;
+}
+
+function renderBusca(r) {
+  $("#busca-metricas").style.display = "grid";
+  $("#busca-resultado-card").style.display = "block";
+  $("#m-algoritmo").textContent   = r.algoritmo;
+  $("#m-encontrados").textContent = r.quantidadeEncontrada + " / " + r.totalRegistros;
+  $("#m-comparacoes").textContent = Number(r.comparacoes).toLocaleString("pt-BR");
+  $("#m-tempo").textContent       = r.milissegundos + " ms";
+
+  const tbody = $("#tabela-busca tbody");
+  $("#empty-busca").classList.toggle("hidden", r.quantidadeEncontrada > 0);
+  tbody.innerHTML = (r.encontrados || []).map(it => `<tr>
+    <td><span class="id-pill">#${it.id}</span></td>
+    <td><b>${destacarPadrao(it.valor, r.padrao)}</b></td>
+    <td>${it.ocorrencias}</td>
+    <td>${(it.posicoes || []).join(", ")}</td>
+  </tr>`).join("");
+}
+
+async function executarBusca() {
+  const padrao = $("#busca-padrao").value.trim();
+  const algoritmo = $("#busca-algoritmo").value;
+  if (!padrao) { toast("Informe um padrão para pesquisar.", "error"); return; }
+  try {
+    const r = await api("GET", "/busca?padrao=" + encodeURIComponent(padrao) + "&algoritmo=" + algoritmo);
+    renderBusca(r);
+    $("#busca-comparativo").style.display = "none";
+  } catch (err) {
+    toast("Erro na busca: " + err.message, "error");
+  }
+}
+
+const formBusca = $("#form-busca");
+if (formBusca) formBusca.addEventListener("submit", (e) => { e.preventDefault(); executarBusca(); });
+
+const btnComparar = $("#btn-busca-comparar");
+if (btnComparar) btnComparar.addEventListener("click", async () => {
+  const padrao = $("#busca-padrao").value.trim();
+  if (!padrao) { toast("Informe um padrão para comparar.", "error"); return; }
+  try {
+    const [kmp, bm] = await Promise.all([
+      api("GET", "/busca?padrao=" + encodeURIComponent(padrao) + "&algoritmo=kmp"),
+      api("GET", "/busca?padrao=" + encodeURIComponent(padrao) + "&algoritmo=bm"),
+    ]);
+    renderBusca(kmp); // tabela com o resultado (idêntico nos dois)
+    const vencedor = kmp.comparacoes === bm.comparacoes
+      ? "empate"
+      : (kmp.comparacoes < bm.comparacoes ? "KMP" : "Boyer-Moore");
+    $("#busca-comparativo").style.display = "block";
+    $("#resultado-comparativo").textContent =
+      `Padrão: "${padrao}"   ·   Campo: ${kmp.campo}   ·   Registros varridos: ${kmp.totalRegistros}\n` +
+      `Encontrados: ${kmp.quantidadeEncontrada}\n\n` +
+      `KMP ............ comparações: ${kmp.comparacoes.toLocaleString("pt-BR").padStart(8)}   tempo: ${kmp.milissegundos} ms\n` +
+      `Boyer-Moore .... comparações: ${bm.comparacoes.toLocaleString("pt-BR").padStart(8)}   tempo: ${bm.milissegundos} ms\n\n` +
+      `Menos comparações: ${vencedor}`;
+  } catch (err) {
+    toast("Erro ao comparar: " + err.message, "error");
+  }
+});
+
+// ====================================================================
+//  SEGURANÇA / CRIPTOGRAFIA (FASE V — XOR)
+// ====================================================================
+function popularSelectUsuariosCripto() {
+  const sel = $("#cripto-usuario");
+  if (!sel) return;
+  sel.innerHTML = state.usuarios.map(u =>
+    `<option value="${u.id}">#${u.id} · ${escapeHtml(u.nome)}</option>`).join("")
+    || '<option value="">Nenhum usuário</option>';
+}
+
+const btnCriptoDemo = $("#btn-cripto-demo");
+if (btnCriptoDemo) btnCriptoDemo.addEventListener("click", async () => {
+  const texto = $("#cripto-texto").value;
+  if (!texto) { toast("Digite um texto para cifrar.", "error"); return; }
+  try {
+    const r = await api("GET", "/seguranca/demo?texto=" + encodeURIComponent(texto));
+    $("#resultado-cripto-demo").textContent =
+      `Método ......... : ${r.metodo}\n` +
+      `Original ....... : ${r.original}\n` +
+      `Cifrado (hex) .. : ${r.cifradoHex}\n` +
+      `Cifrado (Base64) : ${r.cifradoBase64}\n` +
+      `Decifrado ...... : ${r.decifrado}`;
+  } catch (err) {
+    $("#resultado-cripto-demo").textContent = "Erro: " + err.message;
+  }
+});
+
+const btnCriptoUsuario = $("#btn-cripto-usuario");
+if (btnCriptoUsuario) btnCriptoUsuario.addEventListener("click", async () => {
+  const id = $("#cripto-usuario").value;
+  if (!id) return;
+  try {
+    const r = await api("GET", "/seguranca/usuario/" + id);
+    $("#resultado-cripto-usuario").textContent =
+      `Campo .................... : ${r.campo}\n` +
+      `E-mail em memória (claro)  : ${r.emailClaro}\n` +
+      `E-mail em disco (hex) .... : ${r.emailCifradoHex}\n` +
+      `E-mail em disco (Base64) . : ${r.emailCifradoBase64}\n\n` +
+      `// ${r.observacao}`;
+  } catch (err) {
+    $("#resultado-cripto-usuario").textContent = "Erro: " + err.message;
+  }
+});
+
+// popula o select de usuários ao abrir a aba Segurança
+$$('.menu-item[data-view="seguranca"]').forEach(b => b.addEventListener("click", popularSelectUsuariosCripto));
 
